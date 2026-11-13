@@ -166,7 +166,9 @@ function Shell() {
   );
 }
 function Home() {
-  const [v, setV] = useState([]),
+  const [v, setV] = useState(null),
+    [likeCount, setLikeCount] = useState(0),
+    [isLiked, setIsLiked] = useState(false),
     [err, setErr] = useState(""),
     [loading, setLoading] = useState(true),
     [sp] = useSearchParams();
@@ -283,8 +285,8 @@ function Auth({ register = false }) {
     [cover, setCover] = useState(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    nav = useNavigate(),
-    [, setUser] = useOutletContext();
+    nav = useNavigate();
+  const { setUser } = useOutletContext();
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -389,16 +391,23 @@ function Auth({ register = false }) {
     </div>
   );
 }
+
 function Watch() {
-  const { id } = useParams(),
-    [v, setV] = useState(null),
-    [comments, setComments] = useState([]),
-    [text, setText] = useState(""),
-    [error, setError] = useState("");
+  const { id } = useParams();
+
+  const [v, setV] = useState(null);
+  const [likeCount, setLikeCount] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+
   useEffect(() => {
     Promise.all([
       api.get("/videos/" + id),
-      api.get("/comments/" + id, { params: { page: 1, limit: 30 } }),
+      api.get("/comments/" + id, {
+        params: { page: 1, limit: 30 },
+      }),
     ])
       .then(([a, b]) => {
         setV(data(a)?.video || data(a));
@@ -406,24 +415,48 @@ function Watch() {
       })
       .catch((e) => setError(msg(e)));
   }, [id]);
+
   async function comment(e) {
     e.preventDefault();
+
     try {
-      const r = await api.post("/comments/" + id, { content: text });
+      const r = await api.post("/comments/" + id, {
+        content: text,
+      });
+
       setComments([data(r)?.comment || data(r), ...comments]);
+
       setText("");
     } catch (e) {
       setError(msg(e));
     }
   }
+
   async function like() {
     try {
-      await api.post("/likes/toggle/v/" + id);
+      const r = await api.post("/likes/toggle/v/" + id);
+      const result = data(r);
+
+      setIsLiked(result.isLiked);
+      setLikeCount(result.likeCount);
     } catch (e) {
       setError(msg(e));
     }
   }
-  if (!v) return <div className="wrap">{error || "Loading video…"}</div>;
+
+  async function share() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      alert("Video link copied!");
+    } catch {
+      setError("Unable to copy video link.");
+    }
+  }
+
+  if (!v) {
+    return <div className="wrap">{error || "Loading video..."}</div>;
+  }
+
   return (
     <div className="wrap">
       <div className="grid gap-8 2xl:grid-cols-[1fr_320px]">
@@ -434,50 +467,62 @@ function Watch() {
             src={v.videoFile}
             className="aspect-video w-full rounded-2xl bg-black"
           />
+
           <h1 className="mt-5 text-2xl font-black">{v.title}</h1>
+
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-5">
             <Link to={"/channel/" + (v.owner?._id || "")} className="font-bold">
               {v.owner?.fullName || v.owner?.username || "Creator"}
             </Link>
+
             <div className="flex gap-2">
-              <button onClick={like} className="btn secondary">
-                <ThumbsUp size={16} />
-                Like
-              </button>
               <button
-                className="btn secondary"
-                onClick={() => navigator.clipboard?.writeText(location.href)}
+                onClick={like}
+                className={`btn ${isLiked ? "primary" : "secondary"}`}
               >
+                <ThumbsUp size={16} />
+                {isLiked ? "Liked" : "Like"} ({likeCount})
+              </button>
+
+              <button className="btn secondary" onClick={share}>
                 Share
               </button>
             </div>
           </div>
+
           <p className="mt-4 rounded-xl bg-zinc-900 p-4 text-sm text-zinc-300">
             {v.views || 0} views
             <br />
             <br />
             {v.description}
           </p>
+
           <section className="mt-8">
             <h2 className="mb-4 text-lg font-bold">
               Comments ({comments.length})
             </h2>
+
             <form onSubmit={comment} className="mb-6 flex gap-2">
               <input
                 className="field"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Add a comment…"
+                placeholder="Add a comment..."
+                required
               />
+
               <button className="btn primary">Send</button>
             </form>
+
             {error && <p className="mb-3 text-sm text-red-400">{error}</p>}
+
             <div className="space-y-4">
               {comments.map((c) => (
                 <div key={c._id} className="border-b border-zinc-800 pb-3">
                   <p className="text-xs font-bold">
                     {c.owner?.username || "User"}
                   </p>
+
                   <p className="mt-1 text-sm text-zinc-300">{c.content}</p>
                 </div>
               ))}
@@ -488,6 +533,7 @@ function Watch() {
     </div>
   );
 }
+
 function Upload() {
   const [title, setTitle] = useState(""),
     [description, setDescription] = useState(""),

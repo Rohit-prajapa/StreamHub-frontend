@@ -1,32 +1,48 @@
 import axios from "axios";
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api/v1",
   withCredentials: true,
 });
+
 api.interceptors.response.use(
-  (r) => r,
-  async (e) => {
-    const c = e.config;
+  (response) => response,
+  async (error) => {
+    const config = error.config;
+
     if (
-      e.response?.status === 401 &&
-      c &&
-      !c._retry &&
-      !c.url?.includes("/users/refresh-token") &&
-      !c.url?.includes("/users/login")
+      error.response?.status === 401 &&
+      config &&
+      !config._retry &&
+      !config.url?.includes("/users/refresh-token") &&
+      !config.url?.includes("/users/login")
     ) {
-      c._retry = true;
+      config._retry = true;
+
       try {
         await api.post("/users/refresh-token");
-        return api(c);
-      } catch {}
+        return api(config);
+      } catch {
+        // Refresh failed; return original error
+      }
     }
-    return Promise.reject(e);
+
+    return Promise.reject(error);
   },
 );
-export const data = (r) => r?.data?.data ?? r?.data ?? r;
-export const arr = (x) =>
-  Array.isArray(x)
-    ? x
-    : x?.videos || x?.docs || x?.comments || x?.playlists || x?.channels || [];
-export const msg = (e) =>
-  e?.response?.data?.message || e.message || "Request failed";
+
+export const data = (response) =>
+  response?.data?.data ?? response?.data ?? response;
+
+export const arr = (value) =>
+  Array.isArray(value)
+    ? value
+    : value?.videos ||
+      value?.docs ||
+      value?.comments ||
+      value?.playlists ||
+      value?.channels ||
+      [];
+
+export const msg = (error) =>
+  error?.response?.data?.message || error?.message || "Request failed";
